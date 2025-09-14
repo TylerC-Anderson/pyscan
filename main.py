@@ -1,35 +1,36 @@
 import argparse
 import socket
 import sys
-import concurrent.futures
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+# Prettifying
+from rich import print
+from rich.panel import Panel
+from rich.progress import Progress, BarColumn, TimeRemainingColumn, TimeElapsedColumn
+
+# tracking progress and context
+# import multiprocessing
+import datetime
 
 def main():
 
     # ArgParse setup
     parser = argparse.ArgumentParser(
         description="A DIY Scanning tool.",
-        epilog="** DON'T _actually_ run this tool against random domains, dummy"
-    )
-
+        epilog="** DON'T _actually_ run this tool against random domains, dummy")
     # arg.target calls IP supplied by user
     parser.add_argument(
         "target",
-        help="Target IP address or hostname (e.g. 192.168.1.1, Google.com**)"
-    )
-
+        help="Target IP address or hostname (e.g. 192.168.1.1, Google.com**)")
     # arg.port calls port range supplied by user
     parser.add_argument(
         "-p", "--port",
         help="Port or port range (e.g. 22, 20-443). Default: all 65,535 TCP Ports",
-        default="1-65535"
-    )
-
+        default="1-65535")
     parser.add_argument(
         "-w", "--wait",
         help="Time to wait for socket connection in seconds. Default is 0.05s",
-        default=0.05
-    )
-
+        default=0.05)
     # Actually parsing the args according to the
     # user's invocation
     args = parser.parse_args()
@@ -53,17 +54,9 @@ def main():
         print(f"{e}")
         sys.exit(1)
 
-    # Concurrent Futures loop
-    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-        for port in target_ports:
-            scans = executor.submit(scan_ip, target_ip, port, wait_time)
+    display_banner(target_ip)
 
-
-    if (len(target_ports) > 1):
-        print(f"Scanning Success! Scanned {target_ip} from ports {target_ports.start} through {target_ports.stop-1}")
-    
-    else:
-        print(f"Scanning Success! Scanned {target_ip} @ port {target_ports.start}")
+    process_scan(target_ip, target_ports, wait_time)
 
     sys.exit(0)
 
@@ -93,7 +86,6 @@ def parse_ports(port_arg: str):
         if not (1 <= port <= 65535):
             raise ValueError(f"Invalid port number: {port_arg}")
         return range(port, port+1)
-
 def scan_ip(ip_addr: str, port: int, wait_time: float):
     
     # declare the plug
@@ -105,6 +97,53 @@ def scan_ip(ip_addr: str, port: int, wait_time: float):
         # 0 indicates a successful connection
         if (connection == 0):
             print(f"{ip_addr} - open port: {port}")
+def display_banner(target_ip: str):
+    curr_date_and_time = datetime.datetime.now()
+    today = curr_date_and_time.strftime("%x")
+    now = curr_date_and_time.strftime("%X")
+
+    border_string = Panel.fit(f"\nPyScan activated. Target IP: {target_ip}\nStarting scan. Scan started on {today} @ {now}\n",
+    title="PyScan Port Scanner")
+
+    print()
+    print(border_string)
+def process_scan(target_ip: str, ports: range, wait_time: float):
+    # Code for Tracking progress in a parellelized process is
+    # adapted from code courtesy of Dean Montgomery @ URL:
+    # https://www.deanmontgomery.com/2022/03/24/rich-progress-and-multiprocessing/
+    
+    with Progress(
+        "[progress.description]{task.description}",
+        BarColumn(),
+        "[progress.percentage]{task.percentage:>3.0f}%",
+        TimeRemainingColumn(),
+        TimeElapsedColumn(),
+        ) as progress:
+        
+        scan_task = progress.add_task(f"[cyan]Progress of ports {ports.start} - {ports.stop}: ", total = len(ports))
+        
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            futures = []
+
+        # Concurrent Futures loop
+            for port in ports:
+                future = executor.submit(scan_ip, target_ip, port, wait_time)
+                futures.append(future)
+            
+            for future in as_completed(futures):
+                if exc := future.exception():
+                    pass
+                progress.advance(scan_task, 1)           
+
+            for future in futures:
+                future.result()
+
+
+    if (len(ports) > 1):
+        print(f"Scanning Success! Scanned {target_ip} from ports {ports.start} through {ports.stop-1}")
+    
+    else:
+        print(f"Scanning Success! Scanned {target_ip} @ port {ports.start}")
 
 if __name__ == "__main__":
     main()
