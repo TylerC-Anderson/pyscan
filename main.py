@@ -30,6 +30,7 @@ def main():
     parser.add_argument(
         "-w", "--wait",
         help="Time to wait for socket connection in seconds. Default is 0.05s",
+        type=float,
         default=0.05)
     # Actually parsing the args according to the
     # user's invocation
@@ -39,7 +40,7 @@ def main():
         target_ip = socket.gethostbyname(args.target) # DNS resolution
     except socket.gaierror:
         print(f"Error: unable to resolve {args.target}")
-        sys.exit(1)
+        sys.exit(2)
 
     
     try:
@@ -56,7 +57,14 @@ def main():
 
     display_banner(target_ip)
 
-    process_scan(target_ip, target_ports, wait_time)
+    try:
+        process_scan(target_ip, target_ports, wait_time)
+    except KeyboardInterrupt:
+        print("\nExiting program.")
+        sys.exit(-1)
+    except socket.error as e:
+        print(f"Socket error: {e}")
+        sys.exit(2)
 
     sys.exit(0)
 
@@ -86,7 +94,7 @@ def parse_ports(port_arg: str):
         if not (1 <= port <= 65535):
             raise ValueError(f"Invalid port number: {port_arg}")
         return range(port, port+1)
-def scan_ip(ip_addr: str, port: int, wait_time: float):
+def scan_port(ip_addr: str, port: int, wait_time: float):
     
     # declare the plug
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as plug:
@@ -120,22 +128,20 @@ def process_scan(target_ip: str, ports: range, wait_time: float):
         TimeElapsedColumn(),
         ) as progress:
         
-        scan_task = progress.add_task(f"[cyan]Progress of ports {ports.start} - {ports.stop}: ", total = len(ports))
+        scan_task = progress.add_task(f"[cyan]Progress of ports {ports.start} - {ports.stop-1}: ", total = len(ports))
         
         with ThreadPoolExecutor(max_workers=10) as executor:
             futures = []
 
         # Concurrent Futures loop
             for port in ports:
-                future = executor.submit(scan_ip, target_ip, port, wait_time)
+                future = executor.submit(scan_port, target_ip, port, wait_time)
                 futures.append(future)
             
             for future in as_completed(futures):
                 if exc := future.exception():
                     pass
                 progress.advance(scan_task, 1)           
-
-            for future in futures:
                 future.result()
 
 
