@@ -5,6 +5,6 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "more-itertools>=10.8.0",
+    "more-itertools>=11.0.2",
     "rich>=14.1.0",
 ]
